@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LucidPerformer · live performance with an AI agent</title>
+  <meta name="description" content="LucidPerformer is a live performance instrument written from scratch in Rust: a clip grid with scenes and macros that a person and an AI agent play together, on the beat.">
+  <meta property="og:title" content="LucidPerformer · live performance with an AI agent">
+  <meta property="og:description" content="A live clip-grid instrument in pure Rust that a person and an AI agent play together, on the beat.">
+  <meta property="og:image" content="img/performer-history-dark.jpg">
+  <link rel="icon" type="image/svg+xml" href="img/favicon.svg">
+  <style>
+    :root {
+      --bg: #141516;
+      --bg-raised: #1c1e20;
+      --bg-card: #212427;
+      --line: #2e3236;
+      --text: #e6e8ea;
+      --text-dim: #a2a8ae;
+      --accent: #3fd8dc;
+      --accent-dim: rgba(63, 216, 220, 0.14);
+      --radius: 10px;
+      --max: 1120px;
+      --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 17px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code { font-family: var(--mono); font-size: 0.88em; background: var(--bg-card); padding: 0.1em 0.35em; border-radius: 4px; }
+    img { max-width: 100%; height: auto; display: block; }
+    .wrap { max-width: var(--max); margin: 0 auto; padding: 0 16px; }
+
+    nav { position: sticky; top: 0; z-index: 10; background: rgba(20, 21, 22, 0.88); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+    nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 56px; gap: 16px; }
+    nav .brand { display: flex; align-items: center; gap: 10px; color: var(--text); font-weight: 600; letter-spacing: 0.02em; }
+    nav .brand img { width: 28px; height: 28px; }
+    nav ul { display: flex; gap: 22px; list-style: none; margin: 0; padding: 0; font-size: 15px; }
+    nav ul a { color: var(--text-dim); }
+    nav ul a:hover { color: var(--text); text-decoration: none; }
+
+    header.hero { padding: 64px 0 40px; text-align: center; background: radial-gradient(ellipse at 50% 0%, rgba(63, 216, 220, 0.12), transparent 60%); }
+    .hero .logo { width: min(420px, 80vw); margin: 0 auto 8px; }
+    .hero h1 { font-size: clamp(30px, 5vw, 48px); line-height: 1.15; margin: 16px 0 14px; letter-spacing: -0.01em; }
+    .hero h1 span { color: var(--accent); }
+    .hero p.lead { font-size: clamp(17px, 2.2vw, 20px); color: var(--text-dim); max-width: 760px; margin: 0 auto; }
+    .badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 26px 0 0; padding: 0; list-style: none; }
+    .badges li { font-size: 13px; border: 1px solid var(--line); background: var(--bg-raised); color: var(--text-dim); padding: 4px 12px; border-radius: 999px; }
+    .badges li.status { border-color: rgba(214, 158, 46, 0.5); color: #e6b34e; }
+    .hero-shot { margin: 44px auto 0; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55); }
+
+    section { padding: 72px 0; border-top: 1px solid var(--line); }
+    section h2 { font-size: clamp(24px, 3.4vw, 32px); margin: 0 0 10px; letter-spacing: -0.01em; }
+    section p.intro { color: var(--text-dim); max-width: 760px; margin: 0 0 36px; }
+
+    .grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); }
+    .card { background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; }
+    .card h3 { margin: 0 0 8px; font-size: 18px; }
+    .card p { margin: 0; color: var(--text-dim); font-size: 15.5px; }
+    .card .tag { display: inline-block; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); margin-bottom: 8px; }
+
+    .split { display: grid; gap: 40px; grid-template-columns: 1fr 1fr; align-items: center; }
+    .split > * { min-width: 0; }
+    pre.term { margin: 0; background: #0d0e0f; border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; overflow-x: auto; font: 13.5px/1.7 var(--mono); color: #cfd4d8; }
+    pre.term .c { color: #6b737a; }
+    pre.term .p { color: var(--accent); }
+    ul.checks { list-style: none; padding: 0; margin: 0; }
+    ul.checks li { padding-left: 26px; position: relative; margin: 0 0 12px; color: var(--text-dim); }
+    ul.checks li strong { color: var(--text); }
+    ul.checks li::before { content: ""; position: absolute; left: 4px; top: 0.6em; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+
+    .gallery { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); }
+    figure { margin: 0; background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+    figure img { width: 100%; cursor: zoom-in; }
+    figcaption { padding: 12px 16px; font-size: 14.5px; color: var(--text-dim); }
+
+    .stack { display: grid; gap: 56px; }
+    .split.flip > :first-child { order: 2; }
+    .facts { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 0; padding: 0; list-style: none; }
+    .facts li { font-size: 13.5px; padding: 3px 10px; border-radius: 6px; background: var(--accent-dim); color: var(--accent); font-family: var(--mono); }
+
+    .notice { background: var(--bg-raised); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: var(--radius); padding: 24px 26px; }
+    .notice h3 { margin: 0 0 6px; }
+    .notice p { margin: 0; color: var(--text-dim); }
+
+    footer { border-top: 1px solid var(--line); padding: 40px 0 56px; color: var(--text-dim); font-size: 15px; }
+    footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 18px; align-items: center; }
+    footer .author { display: flex; align-items: center; gap: 12px; }
+    footer .li { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg-raised); color: var(--text); }
+    footer .li:hover { border-color: var(--accent); text-decoration: none; }
+    footer .li svg { width: 18px; height: 18px; fill: #0a66c2; background: #fff; border-radius: 3px; }
+    footer small { display: block; width: 100%; font-size: 13px; color: #7a8187; }
+
+    dialog { padding: 0; border: none; background: transparent; max-width: 96vw; max-height: 94vh; }
+    dialog::backdrop { background: rgba(0, 0, 0, 0.85); }
+    dialog img { max-height: 92vh; width: auto; border-radius: 8px; cursor: zoom-out; }
+
+    @media (max-width: 820px) {
+      .split { grid-template-columns: 1fr; }
+      .split.flip > :first-child { order: 0; }
+      nav ul { display: none; }
+      .gallery { grid-template-columns: 1fr; }
+      .grid { grid-template-columns: 1fr; }
+      section { padding: 56px 0; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="img/favicon.svg" alt="">LucidPerformer</a>
+    <ul>
+      <li><a href="#agents">For agents</a></li>
+      <li><a href="#features">Features</a></li>
+      <li><a href="#screenshots">Screenshots</a></li>
+      <li><a href="#guard">Guard and History</a></li>
+      <li><a href="#about">About</a></li>
+    </ul>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap">
+    <img class="logo" src="img/logo.svg" alt="LucidPerformer logo" width="590" height="160">
+    <h1>Play <span>live</span> with an agent</h1>
+    <p class="lead">
+      A live performance instrument written from scratch in Rust: a grid of clips, scenes and
+      macros running on one beat clock. You play it in its window while an AI agent plays the
+      same set over a local socket, and every move lands on the beat.
+    </p>
+    <ul class="badges">
+      <li>100% Rust</li>
+      <li>Native desktop app</li>
+      <li>macOS · Apple Silicon</li>
+      <li>CLI + MCP server</li>
+      <li class="status">Pre-release · 1.2.0-rc2</li>
+    </ul>
+    <div class="hero-shot">
+      <img src="img/performer-main.jpg" alt="The LucidPerformer window playing a set: Lead and Bass clips launched in the clip grid, two scenes, the Loudness Guard in the top bar and two macro sliders at the bottom" width="1280" height="800">
+    </div>
+  </div>
+</header>
+
+<section id="agents">
+  <div class="wrap split">
+    <div>
+      <h2>Built so an agent can perform with you</h2>
+      <p class="intro" style="margin-bottom:24px">
+        An AI agent such as Claude can join a performance as a second player. It does not edit a
+        timeline: it sends performance ops with a musical time, so a slow answer still lands on
+        the beat.
+      </p>
+      <ul class="checks">
+        <li><strong>Quantized launches.</strong> Every op carries an <code>at</code>:
+          <code>next_bar</code>, <code>next_bars:4</code> for the phrase grid, or
+          <code>+2 bars</code> for a lead. The host queues it and plays it on that sample.</li>
+        <li><strong>Scenes and macros.</strong> A scene launches a row of clips together and can
+          set the tempo; a macro moves up to eight parameters at once, with ramps over bars.</li>
+        <li><strong>Live-coded patterns.</strong> An agent writes a Rhai script and puts it into a
+          slot while the set plays. A script that does not compile is refused and the old clip
+          keeps playing.</li>
+        <li><strong>See what was played.</strong> The History panel shows the last minutes as a
+          spectrogram over a piano roll, and <code>perf.history</code> gives an agent the same
+          record as data.</li>
+        <li><strong>Export to LucidProducer.</strong> A performance becomes a
+          <code>.lucidproj</code>: clip plays turn into regions, parameter moves into
+          automation and tempo moves into tempo changes.</li>
+      </ul>
+    </div>
+    <pre class="term"><span class="c"># a starter set: Drums, Bass, Keys, Pad and a scene "Start"</span>
+<span class="p">$</span> lucidperformer-cli new live.lucidset
+<span class="p">$</span> lucidperformer-cli serve --set live.lucidset &amp;
+
+<span class="c"># the agent plays along, always on the beat</span>
+<span class="p">$</span> lucidperformer-cli scene Start
+<span class="p">$</span> lucidperformer-cli pattern Bass 2 \
+    --file examples/patterns/alternating_bass.rhai
+<span class="p">$</span> lucidperformer-cli launch Bass 2 --at next_bars:4
+<span class="p">$</span> lucidperformer-cli wait next_bars:4
+
+<span class="c"># take the performance home as a LucidProducer project</span>
+<span class="p">$</span> lucidperformer-cli stop
+<span class="p">$</span> lucidperformer-cli export --out take.lucidproj
+
+<span class="c"># or hand the whole thing to Claude Code</span>
+<span class="p">$</span> claude mcp add lucidperformer -- lucidperformer-mcp</pre>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <h2>An instrument for the stage, too</h2>
+    <p class="intro">
+      A dark window with a clip grid, a scene column, macro sliders and a top bar with
+      transport, tempo, quantize and the Loudness Guard. The set is built and edited in the same
+      window, and the engine is the real-time safe one LucidProducer plays with.
+    </p>
+    <div class="grid">
+      <div class="card"><span class="tag">Grid</span><h3>Clip grid</h3>
+        <p>A rack of tracks, each with a column of clip slots. Click a clip to launch it on the
+          set's quantize, or give it a launch quantize and a follow action of its own.</p></div>
+      <div class="card"><span class="tag">Scenes</span><h3>Scenes</h3>
+        <p>A scene launches, keeps or stops each track's slot on the same sample and can change
+          the tempo. Capture turns what plays now into a new scene.</p></div>
+      <div class="card"><span class="tag">Macros</span><h3>Macros and ramps</h3>
+        <p>A macro is one 0 to 1 slider mapped onto up to eight targets, each with its own range.
+          Any parameter or macro can ramp to a value over beats or bars.</p></div>
+      <div class="card"><span class="tag">Clips</span><h3>Pattern and script clips</h3>
+        <p>Next to notes clips there are step-pattern clips for drums and script clips: Rhai
+          code that writes the notes of each pass, swapped in while the set plays.</p></div>
+      <div class="card"><span class="tag">Safety</span><h3>Loudness Guard</h3>
+        <p>Every output ends in a true-peak ceiling of -1 dBFS and a short-term limit of
+          -10 LUFS. Agents can read it but not change it; it can only be lowered, when the host
+          starts or in the app's Output Safety settings.</p></div>
+      <div class="card"><span class="tag">History</span><h3>History panel</h3>
+        <p>A mel spectrogram over an aggregated piano roll, with bars, scene and tempo markers,
+          over 16, 32 or 64 bars, 1, 5 or 10 minutes, or the whole performance.</p></div>
+      <div class="card"><span class="tag">Agents</span><h3>Socket and MCP</h3>
+        <p><code>lucidperformer-cli</code> and <code>lucidperformer-mcp</code> talk to the
+          running app or a headless host: state, ops, set edits, events and an offline
+          rehearsal of a cue list.</p></div>
+      <div class="card"><span class="tag">Export</span><h3>Export with automation</h3>
+        <p>A performance or the scenes become a LucidProducer project, with track moves and the
+          master volume as automation lanes, ready to mix and render.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="screenshots">
+  <div class="wrap">
+    <h2>Screenshots</h2>
+    <p class="intro">From the app's own snapshot tests. Click an image to enlarge it.</p>
+    <div class="gallery">
+      <figure><img src="img/performer-history-dark.jpg" alt="The starter set playing with the History panel open on the right: a mel spectrogram above a piano roll of every track" loading="lazy"><figcaption>The History panel: what the set played over the last 16 bars.</figcaption></figure>
+      <figure><img src="img/performer-history-light.jpg" alt="The History panel in the light theme" loading="lazy"><figcaption>The History panel in the light theme.</figcaption></figure>
+      <figure><img src="img/performer-set-editing.jpg" alt="The Track panel open for the Drums track: name, instrument, inserts and channel strip" loading="lazy"><figcaption>Building a set: the Track panel with instrument, inserts and channel strip.</figcaption></figure>
+      <figure><img src="img/performer-macros.jpg" alt="The Macro Editor with one macro mapped onto two track volumes" loading="lazy"><figcaption>The Macro Editor: one macro, two targets, each with its own range.</figcaption></figure>
+      <figure><img src="img/performer-guard.jpg" alt="The top bar with the Loudness Guard lit while it reduces the level" loading="lazy"><figcaption>The Loudness Guard at work, shown in the top bar.</figcaption></figure>
+      <figure><img src="img/performer-main.jpg" alt="The clip grid playing a set with two scenes and two macros" loading="lazy"><figcaption>The clip grid, scenes and macros while a set plays.</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section id="guard">
+  <div class="wrap">
+    <h2>Loudness Guard and History</h2>
+    <p class="intro">
+      Playing live with an agent needs two things a studio does not: a hard limit on what can
+      reach the speakers, and a way to see what just happened.
+    </p>
+    <div class="stack">
+      <div class="split">
+        <div>
+          <h3>A limit nobody can raise</h3>
+          <p style="color:var(--text-dim)">
+            A runaway synth, a feedback loop or an agent's mistake never reaches your ears at full
+            level. The guard sits at the end of every output, live and in offline rehearsals, and
+            the top bar shows when it reduces the level. An agent reads the guard's state but has
+            no way to turn it up.
+          </p>
+          <ul class="facts">
+            <li>-1 dBFS true peak</li><li>-10 LUFS short term</li><li>on in every output</li><li>lower only</li>
+          </ul>
+        </div>
+        <figure><img src="img/performer-guard.jpg" alt="The Loudness Guard reducing the level, shown in the top bar" loading="lazy"><figcaption>The guard lit in the top bar while it reduces the level.</figcaption></figure>
+      </div>
+      <div class="split flip">
+        <div>
+          <h3>See what was played</h3>
+          <p style="color:var(--text-dim)">
+            The History panel (View &gt; History, Shift+Cmd+H) draws the output as a mel
+            spectrogram above a piano roll of the notes every track played, in the track colours,
+            on one time axis with bar lines, scene and tempo markers. Hover it to read the time,
+            the bar, the frequency and level, or the note and its velocity.
+          </p>
+          <ul class="facts">
+            <li>16 · 32 · 64 bars</li><li>1 · 5 · 10 minutes</li><li>whole</li><li>dark and light</li>
+          </ul>
+        </div>
+        <figure><img src="img/performer-history-dark.jpg" alt="The History panel showing a mel spectrogram above a piano roll" loading="lazy"><figcaption>The History panel over the last 16 bars.</figcaption></figure>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="about">
+  <div class="wrap">
+    <div class="notice">
+      <h3>Not available for download yet</h3>
+      <p>
+        LucidPerformer is in pre-release testing on macOS (Apple Silicon), next to its sibling
+        LucidProducer, the agentic DAW. Public builds will follow. It is a clean-room project
+        and shares no code with any other music software.
+      </p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="author">Made by Dr. Tristan Behrens</div>
+    <a class="li" href="https://www.linkedin.com/in/dr-tristan-behrens-734967a2/" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.34V9h3.42v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 1 1 0-4.13 2.06 2.06 0 0 1 0 4.13zM7.12 20.45H3.56V9h3.56v11.45z"/></svg>
+      Connect on LinkedIn
+    </a>
+    <small>Claude and Claude Code are trademarks of Anthropic. Other names are trademarks of their respective owners.</small>
+  </div>
+</footer>
+
+<dialog id="zoom"><img alt=""></dialog>
+<script>
+  const zoom = document.getElementById("zoom");
+  const zoomImg = zoom.querySelector("img");
+  document.querySelectorAll(".gallery img, .hero-shot img, #guard figure img").forEach((img) => {
+    img.addEventListener("click", () => {
+      zoomImg.src = img.src;
+      zoomImg.alt = img.alt;
+      zoom.showModal();
+    });
+  });
+  zoom.addEventListener("click", () => zoom.close());
+</script>
+</body>
+</html>
